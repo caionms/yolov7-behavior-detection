@@ -118,8 +118,13 @@ def detect(save_img=False):
         model.half()  # to FP16
 
     # Load keypoint model
-    model_kpts = attempt_load("yolov7-w6-pose.pt", map_location=device)  #Load model
-    _ = model_kpts.eval()
+    model_kpts = torch.load('yolov7-w6-pose.pt', map_location=device)['model']
+    # Put in inference mode
+    model_kpts.float().eval()
+    if torch.cuda.is_available():
+        # half() turns predictions into float16 tensors
+        # which significantly lowers inference time
+        model_kpts.half().to(device)
     names = model_kpts.module.names if hasattr(model_kpts, 'module') else model_kpts.names  # get class names
 
     # Second-stage classifier
