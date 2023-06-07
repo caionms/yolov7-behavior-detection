@@ -19,6 +19,13 @@ from utils.torch_utils import select_device, load_classifier, \
                 time_synchronized, TracedModel
 from utils.download_weights import download
 
+#For keypoint detection
+import matplotlib.pyplot as plt
+from torchvision import transforms
+from utils.datasets import letterbox
+from utils.general import non_max_suppression_kpt
+from utils.plots import output_to_keypoint, plot_skeleton_kpts,colors,plot_one_box_kpt
+
 #For SORT tracking
 import skimage
 from sort import *
@@ -62,6 +69,12 @@ def detect(save_img=False):
         ('rtsp://', 'rtmp://', 'http://', 'https://'))
 
 
+    #Keypoint detection
+    frame_count = 0  #count no of frames
+    total_fps = 0  #count total fps
+    time_list = []   #list to store time
+    fps_list = []    #list to store fps
+
     #.... Initialize SORT .... 
     #......................... 
     sort_max_age = 5 
@@ -93,7 +106,7 @@ def detect(save_img=False):
     device = select_device(opt.device)
     half = device.type != 'cpu'  # half precision only supported on CUDA
 
-    # Load model
+    # Load detection model
     model = attempt_load(weights, map_location=device)  # load FP32 model
     stride = int(model.stride.max())  # model stride
     imgsz = check_img_size(imgsz, s=stride)  # check img_size
@@ -103,6 +116,11 @@ def detect(save_img=False):
 
     if half:
         model.half()  # to FP16
+
+    # Load keypoint model
+    model_kpts = attempt_load("yolov7-w6-pose.pt", map_location=device)  #Load model
+    _ = model_kpts.eval()
+    names = model_kpts.module.names if hasattr(model_kpts, 'module') else model_kpts.names  # get class names
 
     # Second-stage classifier
     classify = False
@@ -130,7 +148,6 @@ def detect(save_img=False):
     old_img_b = 1
 
     t0 = time.time()
-
     
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
@@ -160,6 +177,12 @@ def detect(save_img=False):
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
 
+        # Saves the boxes of vehicles
+        vehicles_objs = []
+
+        # Saves the boxes of people
+        person_objs = []
+
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             if webcam:  # batch_size >= 1
@@ -186,15 +209,20 @@ def detect(save_img=False):
                 
                 # NOTE: We send in detected object class too
                 for x1,y1,x2,y2,conf,detclass in det.cpu().detach().numpy():
-                    dets_to_sort = np.vstack((dets_to_sort, 
+                    if(detclass == 2 or detclass == 3): #adiciona os veiculos na lista
+                        vehicles_objs.append([x1,y1,x2,y2])
+                    elif(detclass == 0): #adiciona pessoas na lista
+                        person_objs.append([x1,y1,x2,y2])
+                        dets_to_sort = np.vstack((dets_to_sort, 
                                 np.array([x1, y1, x2, y2, conf, detclass])))
                 
                 # Run SORT
                 tracked_dets = sort_tracker.update(dets_to_sort)
-                tracks =sort_tracker.getTrackers()
+                tracks = sort_tracker.getTrackers()
 
                 txt_str = ""
-
+                
+                '''
                 #loop over tracks
                 for track in tracks:
                     # color = compute_color_for_labels(id)
@@ -223,16 +251,21 @@ def detect(save_img=False):
                         if save_bbox_dim:
                             txt_str += " %f %f" % (np.abs(track.bbox_history[-1][0] - track.bbox_history[-1][2]) / im0.shape[0], np.abs(track.bbox_history[-1][1] - track.bbox_history[-1][3]) / im0.shape[1])
                         txt_str += "\n"
-                
+               
+                        
                 if save_txt and not save_with_object_id:
                     with open(txt_path + '.txt', 'a') as f:
                         f.write(txt_str)
-
+                 '''
+                
                 # draw boxes for visualization
                 if len(tracked_dets)>0:
                     bbox_xyxy = tracked_dets[:,:4]
                     identities = tracked_dets[:, 8]
                     categories = tracked_dets[:, 4]
+                    print(bbox_xyxy)
+                    print(identities)
+
                     draw_boxes(im0, bbox_xyxy, identities, categories, names, save_with_object_id, txt_path)
                 #........................................................
                 
