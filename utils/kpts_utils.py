@@ -81,7 +81,6 @@ def plot_skeleton_kpts_v2(im, kpts, steps, orig_shape=None):
     if isinstance(kpts, np.float64):
       kpts = kpts.tolist()
     num_kpts = len(kpts) // steps
-    print('Nm de kpts = ' + str(num_kpts))
     is_suspect = False #Condição para pintar de suspeito
     r, g, b = 0, 0, 255 #RED - Ordem inversa
 
@@ -139,9 +138,10 @@ def xywh2xyxy_personalizado(boxes):
     Returns:
         Lista de caixas delimitadoras no formato [x1, y1, x2, y2].
     """
+    
     x, y, w, h = boxes[0], boxes[1], boxes[2], boxes[3]
-    x1 = x
-    y1 = y
-    x2 = x + w
-    y2 = y + h
+    x1 = x - w / 2
+    y1 = y - h / 2
+    x2 = x + w / 2
+    y2 = y + h /2
     return [x1, y1, x2, y2]

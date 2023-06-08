@@ -43,7 +43,7 @@ def draw_boxes(img, bbox, identities=None, categories=None, dic=None, indices_kp
         cat = int(categories[i]) if categories is not None else 0
         id = int(identities[i]) if identities is not None else 0
         kpts = indices_kpts[i]
-        plot_skeleton_kpts_v2(img, kpts, 3)
+        plot_skeleton_kpts_v2(img, dic[indices_kpts[i]-1], 3)
 
         data = (int((box[0]+box[2])/2),(int((box[1]+box[3])/2)))
         label = str(id) + ":"+ names[cat]
@@ -187,7 +187,6 @@ def detect(save_img=False):
 
         # Saves the boxes of people
         person_objs = []
-
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             if webcam:  # batch_size >= 1
@@ -250,12 +249,16 @@ def detect(save_img=False):
                   keypoints = output[idx, 7:].T
 
                   if(class_id == 0): #chama o tracking para pessoas
-                    #x1,y1,x2,y2 = xywh2xyxy_personalizado([x, y, w, h])
-                    dic[i] = keypoints;
-                    print(x1, y1, x2, y2, conf, class_id, i)
+                    x1,y1,x2,y2 = xywh2xyxy_personalizado([x, y, w, h])
+                    dic[idx] = keypoints;
+                    #print('vetor sendo salvo no tracker')
+                    #print(x1, y1, x2, y2, conf, class_id, idx)
                     dets_to_sort = np.vstack((dets_to_sort, 
-                            np.array([x1, y1, x2, y2, conf, class_id, i])))
-                                    
+                            np.array([x1, y1, x2, y2, conf, class_id, idx])))
+
+                #print('dets to sort')
+                #print(dets_to_sort)
+                        
                 # Run SORT
                 tracked_dets = sort_tracker.update_kpts(dets_to_sort)
                 tracks = sort_tracker.getTrackers()
@@ -301,13 +304,14 @@ def detect(save_img=False):
                 #dentro do método de draw_boxes chamar o plot skeleton
                 # draw boxes for visualization 
                 
+                print('tracked dets')
+                print(tracked_dets)
+
                 if len(tracked_dets)>0:
                     bbox_xyxy = tracked_dets[:,:4]
                     identities = tracked_dets[:, 8]
                     categories = tracked_dets[:, 4]
-                    indices_kpts = tracked_dets[:, 4]
-                    print('teste')
-                    print(tracked_dets)
+                    indices_kpts = tracked_dets[:, 8]
                     
 
                     #dentro do draw_boxes, testar se intercepta (passando a lista de veiculos)

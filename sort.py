@@ -266,13 +266,13 @@ class Sort(object):
             if(trk.time_since_update >self.max_age):
                 self.trackers.pop(i)
         if(len(ret) > 0):
-            return np.concatenate(ret), i
+            return np.concatenate(ret)
         return np.empty((0,6))
     
     def update_kpts(self, dets=np.empty((0, 7))):
       """
       Parameters:
-      'dets' - a numpy array of detection in the format [[x1, y1, x2, y2, score], [x1, y1, x2, y2, score], ...]
+      'dets' - a numpy array of detection in the format [[x1, y1, x2, y2, score, class_id, idx], [x1, y1, x2, y2, conf, class_id, idx], ...]
       
       Ensure to call this method even frame has no detections. (pass np.empty((0, 5)))
       
