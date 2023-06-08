@@ -268,6 +268,56 @@ class Sort(object):
         if(len(ret) > 0):
             return np.concatenate(ret)
         return np.empty((0,6))
+    
+    def update_kpts(self, dets= np.empty((0,6)), kpts=np.empty((0,6))):
+        """
+        Parameters:
+        'dets' - a numpy array of detection in the format [[x1, y1, x2, y2, score], [x1,y1,x2,y2,score],...]
+        
+        Ensure to call this method even frame has no detections. (pass np.empty((0,5)))
+        
+        Returns a similar array, where the last column is object ID (replacing confidence score)
+        
+        NOTE: The number of objects returned may differ from the number of objects provided.
+        """
+        self.frame_count += 1
+        
+        # Get predicted locations from existing trackers
+        trks = np.zeros((len(self.trackers), 7))
+        to_del = []
+        ret = []
+        for t, trk in enumerate(trks):
+            pos = self.trackers[t].predict()[0]
+            trk[:] = [pos[0], pos[1], pos[2], pos[3], 0, 0]
+            if np.any(np.isnan(pos)):
+                to_del.append(t)
+        trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
+        for t in reversed(to_del):
+            self.trackers.pop(t)
+        matched, unmatched_dets, unmatched_trks = associate_detections_to_trackers(dets, trks, self.iou_threshold)
+        
+        # Update matched trackers with assigned detections
+        for m in matched:
+            self.trackers[m[1]].update(dets[m[0], :])
+            
+        # Create and initialize new trackers for unmatched detections
+        for i in unmatched_dets:
+            trk = KalmanBoxTracker(np.hstack((dets[i,:], np.array([0]), kpts[i,:])))
+            #trk = KalmanBoxTracker(np.hstack(dets[i,:])
+            self.trackers.append(trk)
+        
+        i = len(self.trackers)
+        for trk in reversed(self.trackers):
+            d = trk.get_state()[0]
+            if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
+                ret.append(np.concatenate((d, [trk.id+1, kpts[i,:]])).reshape(1,-1)) #+1'd because MOT benchmark requires positive value
+            i -= 1
+            #remove dead tracklet
+            if(trk.time_since_update >self.max_age):
+                self.trackers.pop(i)
+        if(len(ret) > 0):
+            return np.concatenate(ret)
+        return np.empty((0,6))
 
 def parse_args():
     """Parse input arguments."""

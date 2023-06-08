@@ -13,7 +13,7 @@ from utils.datasets import LoadStreams, LoadImages
 from utils.general import check_img_size, check_requirements, \
                 check_imshow, non_max_suppression, apply_classifier, \
                 scale_coords, xyxy2xywh, strip_optimizer, set_logging, \
-                increment_path
+                increment_path, xywh2xyxy
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, \
                 time_synchronized, TracedModel
@@ -25,6 +25,7 @@ from torchvision import transforms
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt
 from utils.plots import output_to_keypoint, plot_skeleton_kpts,colors,plot_one_box_kpt
+from utils.kpts_utils import run_inference, draw_keypoints, plot_skeleton_kpts_v2
 
 #For SORT tracking
 import skimage
@@ -49,6 +50,7 @@ def draw_boxes(img, bbox, identities=None, categories=None, names=None, save_wit
         cv2.putText(img, label, (x1, y1 - 5),cv2.FONT_HERSHEY_SIMPLEX, 
                     0.6, [255, 255, 255], 1)
         # cv2.circle(img, data, 6, color,-1)   #centroid of box
+        
         txt_str = ""
         if save_with_object_id:
             txt_str += "%i %i %f %f %f %f %f %f" % (
@@ -211,21 +213,40 @@ def detect(save_img=False):
                 for x1,y1,x2,y2,conf,detclass in det.cpu().detach().numpy():
                     if(detclass == 2 or detclass == 3): #adiciona os veiculos na lista
                         vehicles_objs.append([x1,y1,x2,y2])
-                    elif(detclass == 0): #adiciona pessoas na lista
-                        person_objs.append([x1,y1,x2,y2])
-                        dets_to_sort = np.vstack((dets_to_sort, 
-                                np.array([x1, y1, x2, y2, conf, detclass])))
+                    #elif(detclass == 0): #adiciona pessoas na lista remover
+                    #    person_objs.append([x1,y1,x2,y2])
+                    #    dets_to_sort = np.vstack((dets_to_sort, 
+                    #            np.array([x1, y1, x2, y2, conf, detclass])))
+                        
+                # chamar o método de output to keypoint e com o resultado fazer outro for, esse for irei chamar o dets_to_sort
                 
+                # Chama o output_to_keypoint (dentro do draw) para detectar os keypoints
+                output, img = run_inference(img)
+                output = non_max_suppression_kpt(output, 
+                                     0.25, # Confidence Threshold
+                                     0.65, # IoU Threshold
+                                     nc=model.yaml['nc'], # Number of Classes
+                                     nkpt=model.yaml['nkpt'], # Number of Keypoints
+                                     kpt_label=True)
+                with torch.no_grad():
+                        output = output_to_keypoint(output)
+                        
+                for batch_id, class_id, x, y, w, h, conf, *kpts in output.cpu().detach().numpy():
+                    if(detclass == 0): #chama o tracking para pessoas
+                        x1,y1,x2,y2 = xywh2xyxy([x, y, w, h])
+                        dets_to_sort = np.vstack((dets_to_sort, 
+                                np.array([x1, y1, x2, y2, conf, 0, *kpts])))
+                                    
                 # Run SORT
-                tracked_dets = sort_tracker.update(dets_to_sort)
+                tracked_dets = sort_tracker.update_kpts(dets_to_sort)
                 tracks = sort_tracker.getTrackers()
 
                 txt_str = ""
                 
-                '''
                 #loop over tracks
                 for track in tracks:
                     # color = compute_color_for_labels(id)
+                    '''
                     #draw colored tracks
                     if colored_trk:
                         [cv2.line(im0, (int(track.centroidarr[i][0]),
@@ -244,7 +265,7 @@ def detect(save_img=False):
                                     (255,0,0), thickness=2) 
                                     for i,_ in  enumerate(track.centroidarr) 
                                       if i < len(track.centroidarr)-1 ] 
-
+                    '''
                     if save_txt and not save_with_object_id:
                         # Normalize coordinates
                         txt_str += "%i %i %f %f" % (track.id, track.detclass, track.centroidarr[-1][0] / im0.shape[1], track.centroidarr[-1][1] / im0.shape[0])
@@ -256,18 +277,24 @@ def detect(save_img=False):
                 if save_txt and not save_with_object_id:
                     with open(txt_path + '.txt', 'a') as f:
                         f.write(txt_str)
-                 '''
+                                
+                #só vai ter pessoas, então posso fazer a chamada passando como um array, a lista de kpts que nem categories (da para pegar no for do output_to_keypoints)
+                #dentro do método de draw_boxes chamar o plot skeleton
+                # draw boxes for visualization 
                 
-                # draw boxes for visualization
                 if len(tracked_dets)>0:
                     bbox_xyxy = tracked_dets[:,:4]
                     identities = tracked_dets[:, 8]
                     categories = tracked_dets[:, 4]
-                    print(bbox_xyxy)
-                    print(identities)
-
-                    draw_boxes(im0, bbox_xyxy, identities, categories, names, save_with_object_id, txt_path)
+                    kpts = tracked_dets[:, 6] # Pegar os keypoints de cada elemento
+                    
+                    plot_skeleton_kpts_v2(img, *kpts, 3)
+                    
+                    #dentro do draw_boxes, testar se intercepta (passando a lista de veiculos)
+                    draw_boxes(im0, bbox_xyxy, identities, categories, kpts, names, save_with_object_id, txt_path)
                 #........................................................
+                
+                #fazer um for que passe pela lista de veiculos que criei e chama o plot_box ou draw_box mostrando vehicle
                 
             # Print time (inference + NMS)
             print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
@@ -305,6 +332,44 @@ def detect(save_img=False):
         #print(f"Results saved to {save_dir}{s}")
 
     print(f'Done. ({time.time() - t0:.3f}s)')
+
+def keypoint_detection(img, model_kpts, device):  
+    img = img.to(device)  #convert image data to device
+    img = img.float() #convert image to float precision (cpu)
+    start_time = time.time() #start time for fps calculation
+
+    with torch.no_grad():  #get predictions
+        output_data, _ = model_kpts(img)
+
+    output_data = non_max_suppression_kpt(output_data,   #Apply non max suppression
+                                0.25,   # Conf. Threshold.
+                                0.65, # IoU Threshold.
+                                nc=model_kpts.yaml['nc'], # Number of classes.
+                                nkpt=model_kpts.yaml['nkpt'], # Number of keypoints.
+                                kpt_label=True)
+
+    output = output_to_keypoint(output_data)
+
+    im0 = img[0].permute(1, 2, 0) * 255 # Change format [b, c, h, w] to [h, w, c] for displaying the image.
+    im0 = im0.cpu().numpy().astype(np.uint8)
+    
+    im0 = cv2.cvtColor(im0, cv2.COLOR_RGB2BGR) #reshape image format to (BGR)
+    gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+
+    for i, pose in enumerate(output_data):  # detections per image
+    
+        if len(output_data):  #check if no pose
+            for c in pose[:, 5].unique(): # Print results
+                n = (pose[:, 5] == c).sum()  # detections per class
+                print("No of Objects in Current Frame : {}".format(n))
+            
+            for det_index, (*xyxy, conf, cls) in enumerate(reversed(pose[:,:6])): #loop over poses for drawing on frame
+                c = int(cls)  # integer class
+                kpts = pose[det_index, 6:]
+                plot_one_box_kpt(xyxy, im0, label=label, color=colors(c, True), 
+                            line_thickness=opt.line_thickness,kpt_label=True, kpts=kpts, steps=3, 
+                            orig_shape=im0.shape[:2])
+        return im0
 
 
 if __name__ == '__main__':
