@@ -221,7 +221,7 @@ def detect(save_img=False):
                 # chamar o método de output to keypoint e com o resultado fazer outro for, esse for irei chamar o dets_to_sort
                 
                 # Chama o output_to_keypoint (dentro do draw) para detectar os keypoints
-                output, img = run_inference(img)
+                output, img = run_inference(img, model_kpts, device)
                 output = non_max_suppression_kpt(output, 
                                      0.25, # Confidence Threshold
                                      0.65, # IoU Threshold

@@ -16,9 +16,9 @@ from os.path import isfile, join
 
 import time
 
-def run_inference(image):
+def run_inference(image, model, device):
     # Resize and pad image
-    image = letterbox(image, 960, stride=64, auto=True)[0] # shape: (567, 960, 3)
+    #image = letterbox(image, 960, stride=64, auto=True)[0] # shape: (567, 960, 3)
     # Apply transforms
     image = transforms.ToTensor()(image) # torch.Size([3, 567, 960])
     if torch.cuda.is_available():
