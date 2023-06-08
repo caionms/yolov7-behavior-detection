@@ -221,7 +221,8 @@ def detect(save_img=False):
                 # chamar o método de output to keypoint e com o resultado fazer outro for, esse for irei chamar o dets_to_sort
                 
                 # Chama o output_to_keypoint (dentro do draw) para detectar os keypoints
-                output, img = run_inference(img, model_kpts, device)
+                vid_cap = cv2.cvtColor(vid_cap, cv2.COLOR_BGR2RGB)
+                output, vid_cap = run_inference(imgsz, model_kpts, device)
                 output = non_max_suppression_kpt(output, 
                                      0.25, # Confidence Threshold
                                      0.65, # IoU Threshold
@@ -288,7 +289,7 @@ def detect(save_img=False):
                     categories = tracked_dets[:, 4]
                     kpts = tracked_dets[:, 6] # Pegar os keypoints de cada elemento
                     
-                    plot_skeleton_kpts_v2(img, *kpts, 3)
+                    plot_skeleton_kpts_v2(imgsz, *kpts, 3)
                     
                     #dentro do draw_boxes, testar se intercepta (passando a lista de veiculos)
                     draw_boxes(im0, bbox_xyxy, identities, categories, kpts, names, save_with_object_id, txt_path)
