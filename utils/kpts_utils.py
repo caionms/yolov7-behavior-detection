@@ -2,7 +2,7 @@ import torch
 from torchvision import transforms
 
 from utils.datasets import letterbox
-from utils.general import non_max_suppression_kpt
+from utils.general import non_max_suppression_kpt, bbox_iou
 from utils.plots import output_to_keypoint, plot_skeleton_kpts
 
 #import matplotlib.pyplot as plt
@@ -51,7 +51,7 @@ def draw_keypoints(output, image, model, only_keypoints):
 
   return nimg
 
-def plot_skeleton_kpts_v2(im, kpts, steps, orig_shape=None):
+def plot_skeleton_kpts_v2(im, kpts, steps, box, vehicles_boxes, orig_shape=None):
     #Plot the skeleton and keypointsfor coco datatset
     palette = np.array([[255, 128, 0], [255, 153, 51], [255, 178, 102],
                         [230, 230, 0], [255, 153, 255], [153, 204, 255],
@@ -83,6 +83,10 @@ def plot_skeleton_kpts_v2(im, kpts, steps, orig_shape=None):
     num_kpts = len(kpts) // steps
     is_suspect = False #Condição para pintar de suspeito
     r, g, b = 0, 0, 255 #RED - Ordem inversa
+
+    #Condição para saber se está próximo de veículo
+    for v_box in vehicles_boxes: 
+      print(bbox_iou(b, v_box))
 
     #Calculate if squat
     #if(is_squat_v4(kpts, steps)):

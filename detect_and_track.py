@@ -23,7 +23,7 @@ from utils.download_weights import download
 import matplotlib.pyplot as plt
 from torchvision import transforms
 from utils.datasets import letterbox
-from utils.general import non_max_suppression_kpt
+from utils.general import non_max_suppression_kpt, bbox_iou
 from utils.plots import output_to_keypoint, plot_skeleton_kpts,colors,plot_one_box_kpt
 from utils.kpts_utils import run_inference, draw_keypoints, plot_skeleton_kpts_v2, xywh2xyxy_personalizado
 
@@ -33,7 +33,7 @@ from sort import *
 
 #............................... Bounding Boxes Drawing ............................
 """Function to Draw Bounding boxes"""
-def draw_boxes(img, bbox, identities=None, categories=None, dic=None, indices_kpts=None, names=None, save_with_object_id=False, path=None,offset=(0, 0)):
+def draw_boxes(img, bbox, vehicles_objs, identities=None, categories=None, dic=None, indices_kpts=None, names=None, save_with_object_id=False, path=None,offset=(0, 0)):
     for i, box in enumerate(bbox):
         x1, y1, x2, y2 = [int(i) for i in box]
         x1 += offset[0]
@@ -42,8 +42,7 @@ def draw_boxes(img, bbox, identities=None, categories=None, dic=None, indices_kp
         y2 += offset[1]
         cat = int(categories[i]) if categories is not None else 0
         id = int(identities[i]) if identities is not None else 0
-        kpts = indices_kpts[i]
-        plot_skeleton_kpts_v2(img, dic[indices_kpts[i]-1], 3)
+        plot_skeleton_kpts_v2(img, dic[indices_kpts[i]-1], 3, [x1,y1,x2,y2], vehicles_objs)
 
         data = (int((box[0]+box[2])/2),(int((box[1]+box[3])/2)))
         label = str(id) + ":"+ names[cat]
@@ -250,7 +249,7 @@ def detect(save_img=False):
 
                   if(class_id == 0): #chama o tracking para pessoas
                     x1,y1,x2,y2 = xywh2xyxy_personalizado([x, y, w, h])
-                    dic[idx] = keypoints;
+                    dic[idx] = keypoints
                     #print('vetor sendo salvo no tracker')
                     #print(x1, y1, x2, y2, conf, class_id, idx)
                     dets_to_sort = np.vstack((dets_to_sort, 
@@ -304,8 +303,8 @@ def detect(save_img=False):
                 #dentro do método de draw_boxes chamar o plot skeleton
                 # draw boxes for visualization 
                 
-                print('tracked dets')
-                print(tracked_dets)
+                #print('tracked dets')
+                #print(tracked_dets)
 
                 if len(tracked_dets)>0:
                     bbox_xyxy = tracked_dets[:,:4]
@@ -315,7 +314,7 @@ def detect(save_img=False):
                     
 
                     #dentro do draw_boxes, testar se intercepta (passando a lista de veiculos)
-                    draw_boxes(im0, bbox_xyxy, identities, categories, dic, indices_kpts, names, save_with_object_id, txt_path)
+                    draw_boxes(im0, bbox_xyxy, vehicles_objs, identities, categories, dic, indices_kpts, names, save_with_object_id, txt_path)
                 #........................................................
                 
                 #fazer um for que passe pela lista de veiculos que criei e chama o plot_box ou draw_box mostrando vehicle
