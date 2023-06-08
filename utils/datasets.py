@@ -23,6 +23,7 @@ from tqdm import tqdm
 import pickle
 from copy import deepcopy
 #from pycocotools import mask as maskUtils
+from torchvision import transforms
 from torchvision.utils import save_image
 from torchvision.ops import roi_pool, roi_align, ps_roi_pool, ps_roi_align
 
@@ -193,6 +194,17 @@ class LoadImages:  # for inference
         # Convert
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
+
+        # Padded resize
+        #print('size = ' + str(self.img_size))
+        #img = letterbox(img0, 1280, stride=self.stride)[0]
+
+        # Convert
+        #img = transforms.ToTensor()(img)
+        #if torch.cuda.is_available():
+        #  img = img.half().to(device)
+        # Turn image into batch
+        #img = img.unsqueeze(0) # torch.Size([1, 3, 567, 960])
 
         return path, img, img0, self.cap
 

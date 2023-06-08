@@ -90,7 +90,6 @@ def draw_boxes_vehicles(img, dets_vehicles, save_with_object_id=False, path=None
     return img
 #..............................................................................
 
-
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace, colored_trk, save_bbox_dim, save_with_object_id= opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace, opt.colored_trk, opt.save_bbox_dim, opt.save_with_object_id
     save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
@@ -178,16 +177,9 @@ def detect(save_img=False):
 
     t0 = time.time()
     
+    #img0 é do cv2.imread
+    #
     for path, img, im0s, vid_cap in dataset:
-        #kpts_img = img.clone()
-        kpts_img = np.copy(img)
-        kpts_img = cv2.cvtColor(kpts_img, cv2.COLOR_BGR2RGB)
-        kpts_img = letterbox(kpts_img, 960, stride=64, auto=True)[0]
-        kpts_img = transforms.ToTensor()(kpts_img) # torch.Size([3, 567, 960])
-        if torch.cuda.is_available():
-          kpts_img = kpts_img.half().to(device)
-        # Turn image into batch
-        kpts_img = kpts_img.unsqueeze(0) # torch.Size([1, 3, 567, 960])
 
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -263,7 +255,7 @@ def detect(save_img=False):
 
                 # Chama o output_to_keypoint (dentro do draw) para detectar os keypoints
                 #vid_cap = cv2.cvtColor(vid_cap, cv2.COLOR_BGR2RGB)
-                output, img = run_inference(kpts_img, model_kpts, device)
+                output, img = run_inference(img, model_kpts, device)
                 output = non_max_suppression_kpt(output, 
                                      0.25, # Confidence Threshold
                                      0.65, # IoU Threshold
@@ -275,6 +267,9 @@ def detect(save_img=False):
                         
                 #pass an empty array to sort
                 dets_to_sort = np.empty((0,7))
+
+                print('output shade')
+                print(output.shape[0])
 
                 #batch_id, class_id, x, y, w, h, conf, *kpts
                 for idx in range(output.shape[0]):
@@ -289,18 +284,21 @@ def detect(save_img=False):
                   conf = output[idx, 6]
                   keypoints = output[idx, 7:].T
 
+                  print('class id')
+                  print(class_id)
+
                   if(class_id == 0): #chama o tracking para pessoas
                     x1,y1,x2,y2 = xywh2xyxy_personalizado([x, y, w, h])
                     dic[idx] = keypoints
-                    #print('vetor sendo salvo no tracker')
-                    #print(x1, y1, x2, y2, conf, class_id, idx)
+                    print('vetor sendo salvo no tracker')
+                    print(x1, y1, x2, y2, conf, class_id, idx)
                     #w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                     #h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                     dets_to_sort = np.vstack((dets_to_sort, 
                             np.array([x1, y1, x2, y2, conf, class_id, idx])))
 
-                #print('dets to sort')
-                #print(dets_to_sort)
+                print('dets to sort')
+                print(dets_to_sort)
                         
                 # Run SORT
                 tracked_dets = sort_tracker.update_kpts(dets_to_sort)
@@ -347,8 +345,8 @@ def detect(save_img=False):
                 #dentro do método de draw_boxes chamar o plot skeleton
                 # draw boxes for visualization 
                 
-                #print('tracked dets')
-                #print(tracked_dets)
+                print('tracked dets')
+                print(tracked_dets)
 
                 if len(tracked_dets)>0:
                     bbox_xyxy = tracked_dets[:,:4]
