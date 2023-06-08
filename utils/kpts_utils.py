@@ -86,9 +86,13 @@ def plot_skeleton_kpts_v2(im, kpts, steps, box, vehicles_boxes, orig_shape=None)
 
     #Condição para saber se está próximo de veículo
     for v_box in vehicles_boxes: 
-      print(bbox_iou_vehicle(box, v_box))
+      #print(bbox_iou_vehicle(box, v_box))
       if bbox_iou_vehicle(box, v_box) > 0:
         is_suspect = True
+        #chama o is_squat
+        #aqui vou acessar a matriz, se o id desse cara não estiver nela, adiciona e inicia o tempo e guarda a pose
+        #caso esteja, calcula o tempo comparando com o atual, caso a pose seja False e a atual True, atualiza
+        #utiliza a pose para fazer a condição de tempo
 
     #Calculate if squat
     #if(is_squat_v4(kpts, steps)):
@@ -150,9 +154,17 @@ def xywh2xyxy_personalizado(boxes):
     x1 = x - w / 2
     y1 = y - h / 2
     x2 = x + w / 2
-    y2 = y + h /2
+    y2 = y + h / 2
     return [x1, y1, x2, y2]
   
+def xywh2xyxy_personalizado_2(x, w=640, h=640, padw=0, padh=0):
+    # Convert nx4 boxes from [x, y, w, h] normalized to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
+    y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)
+    y[0] = w * (x[0] - x[2] / 2) + padw  # top left x
+    y[1] = h * (x[1] - x[3] / 2) + padh  # top left y
+    y[2] = w * (x[0] + x[2] / 2) + padw  # bottom right x
+    y[3] = h * (x[1] + x[3] / 2) + padh  # bottom right y
+    return y
   
 def bbox_iou_vehicle(box1, box2):
     """
