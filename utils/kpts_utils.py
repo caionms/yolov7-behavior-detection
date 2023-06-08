@@ -81,12 +81,11 @@ def plot_skeleton_kpts_v2(im, kpts, steps, orig_shape=None):
     num_kpts = len(kpts) // steps
     is_suspect = False #Condição para pintar de suspeito
     r, g, b = 0, 0, 255 #RED - Ordem inversa
-'''
+
     #Calculate if squat
-    if(is_squat_v4(kpts, steps)):
-      is_suspect = True
-      plot_text_box(im, int(80), int(80), "Agachado")
-'''
+    #if(is_squat_v4(kpts, steps)):
+    #  is_suspect = True
+    #  plot_text_box(im, int(80), int(80), "Agachado")
     #Plot keypoints
     for kid in range(num_kpts):
         if(not is_suspect):
