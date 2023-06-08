@@ -33,7 +33,7 @@ from sort import *
 
 #............................... Bounding Boxes Drawing ............................
 """Function to Draw Bounding boxes"""
-def draw_boxes_kpts(img, bbox, vehicles_objs, identities=None, categories=None, dic=None, indices_kpts=None, names=None, save_with_object_id=False, path=None,offset=(0, 0)):  
+def draw_boxes_kpts(img, bbox, vehicles_objs, identities=None, categories=None, dic=None, indices_kpts=None, names=None, save_with_object_id=False,offset=(0, 0)):  
     for i, box in enumerate(bbox):
         x1, y1, x2, y2 = [int(i) for i in box]
         x1 += offset[0]
@@ -67,7 +67,7 @@ def draw_boxes_kpts(img, bbox, vehicles_objs, identities=None, categories=None, 
 
 """Function to Draw Bounding boxes for Vehicles"""
 #np.array([x1, y1, x2, y2, conf, detclass])
-def draw_boxes_vehicles(img, dets_vehicles, save_with_object_id=False, path=None,offset=(0, 0)):
+def draw_boxes_vehicles(img, dets_vehicles, save_with_object_id=False,offset=(0, 0)):
     for x1, y1, x2, y2, conf, detclass in (dets_vehicles):
         x1 = int(x1)
         y1 = int(y1)
@@ -397,44 +397,239 @@ def detect(save_img=False):
         #print(f"Results saved to {save_dir}{s}")
 
     print(f'Done. ({time.time() - t0:.3f}s)')
-
-def keypoint_detection(img, model_kpts, device):  
-    img = img.to(device)  #convert image data to device
-    img = img.float() #convert image to float precision (cpu)
-    start_time = time.time() #start time for fps calculation
-
-    with torch.no_grad():  #get predictions
-        output_data, _ = model_kpts(img)
-
-    output_data = non_max_suppression_kpt(output_data,   #Apply non max suppression
-                                0.25,   # Conf. Threshold.
-                                0.65, # IoU Threshold.
-                                nc=model_kpts.yaml['nc'], # Number of classes.
-                                nkpt=model_kpts.yaml['nkpt'], # Number of keypoints.
-                                kpt_label=True)
-
-    output = output_to_keypoint(output_data)
-
-    im0 = img[0].permute(1, 2, 0) * 255 # Change format [b, c, h, w] to [h, w, c] for displaying the image.
-    im0 = im0.cpu().numpy().astype(np.uint8)
     
-    im0 = cv2.cvtColor(im0, cv2.COLOR_RGB2BGR) #reshape image format to (BGR)
-    gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+def detect_kpts(save_img=False):
+    source, weights, view_img, save_txt, imgsz, trace, colored_trk, save_bbox_dim, save_with_object_id= opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace, opt.colored_trk, opt.save_bbox_dim, opt.save_with_object_id
+    save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
+    webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
+        ('rtsp://', 'rtmp://', 'http://', 'https://'))
 
-    for i, pose in enumerate(output_data):  # detections per image
+
+    #Keypoint detection
+    frame_count = 0  #count no of frames
+    total_fps = 0  #count total fps
+    time_list = []   #list to store time
+    fps_list = []    #list to store fps
+
+    #.... Initialize SORT .... 
+    #......................... 
+    sort_max_age = 5 
+    sort_min_hits = 2
+    sort_iou_thresh = 0.2
+    sort_tracker = Sort(max_age=sort_max_age,
+                       min_hits=sort_min_hits,
+                       iou_threshold=sort_iou_thresh)
+    #......................... 
     
-        if len(output_data):  #check if no pose
-            for c in pose[:, 5].unique(): # Print results
-                n = (pose[:, 5] == c).sum()  # detections per class
-                print("No of Objects in Current Frame : {}".format(n))
+    
+    #........Rand Color for every trk.......
+    rand_color_list = []
+    for i in range(0,5005):
+        r = randint(0, 255)
+        g = randint(0, 255)
+        b = randint(0, 255)
+        rand_color = (r, g, b)
+        rand_color_list.append(rand_color)
+    #......................................
+   
+
+    # Directories
+    save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run
+    (save_dir / 'labels' if save_txt or save_with_object_id else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
+
+    # Initialize
+    set_logging()
+    device = select_device(opt.device)
+    half = device.type != 'cpu'  # half precision only supported on CUDA
+
+    # Load detection model
+    model = attempt_load(weights, map_location=device)  # load FP32 model
+    stride = int(model.stride.max())  # model stride
+    imgsz = check_img_size(imgsz, s=stride)  # check img_size
+
+    if trace:
+        model = TracedModel(model, device, opt.img_size)
+
+    if half:
+        model.half()  # to FP16
+
+    # Load keypoint model
+    model_kpts = attempt_load("yolov7-w6-pose.pt", map_location=device)  #Load model
+    _ = model_kpts.eval()
+    names = model_kpts.module.names if hasattr(model_kpts, 'module') else model_kpts.names  # get class names
+
+    # Second-stage classifier
+    classify = False
+    if classify:
+        modelc = load_classifier(name='resnet101', n=2)  # initialize
+        modelc.load_state_dict(torch.load('weights/resnet101.pt', map_location=device)['model']).to(device).eval()
+
+    # Set Dataloader
+    cap = cv2.VideoCapture(source)
+    # VideoWriter for saving the video
+    fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+    out = cv2.VideoWriter((source.replace('.mp4', '') +'_output.mp4'), fourcc, 30.0, (int(cap.get(3)), int(cap.get(4))))
+    while cap.isOpened():
+        (ret, frame) = cap.read()
+        if ret == True:
+            frame_orig = frame.clone()
             
-            for det_index, (*xyxy, conf, cls) in enumerate(reversed(pose[:,:6])): #loop over poses for drawing on frame
-                c = int(cls)  # integer class
-                kpts = pose[det_index, 6:]
-                plot_one_box_kpt(xyxy, im0, label=label, color=colors(c, True), 
-                            line_thickness=opt.line_thickness,kpt_label=True, kpts=kpts, steps=3, 
-                            orig_shape=im0.shape[:2])
-        return im0
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            ##
+            # Get names and colors
+            names = model.module.names if hasattr(model, 'module') else model.names
+            colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
+
+            # Run inference
+            output, frame = run_inference(frame, model, device)
+            
+            # Apply NMS
+            output = non_max_suppression(output, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
+            
+            # Apply Classifier
+            if classify: #pred = output
+                output = apply_classifier(output, modelc, output, frame_orig)
+                
+            # Saves the boxes of vehicles
+            vehicles_objs = []
+            
+            for i, det in enumerate(output):  # detections per image
+                s, im0 = '', frame_orig
+
+                gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+                if len(det):
+                    # Rescale boxes from img_size to im0 size
+                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+
+                    # Print results
+                    for c in det[:, -1].unique():
+                        n = (det[:, -1] == c).sum()  # detections per class
+                        s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+
+                    #..................USE TRACK FUNCTION....................
+                    #pass an empty array to sort
+                    dets_vehicles = np.empty((0,6))
+
+                    # NOTE: We send in detected object class too
+                    for x1,y1,x2,y2,conf,detclass in det.cpu().detach().numpy():
+                        if(detclass == 2 or detclass == 3): #adiciona os veiculos na lista
+                            dets_vehicles = np.vstack((dets_vehicles, 
+                                    np.array([x1, y1, x2, y2, conf, detclass])))
+                            vehicles_objs.append([x1,y1,x2,y2])
+                        #elif(detclass == 0): #adiciona pessoas na lista remover
+                        #    person_objs.append([x1,y1,x2,y2])
+                        #    dets_to_sort = np.vstack((dets_to_sort, 
+                        #            np.array([x1, y1, x2, y2, conf, detclass])))
+                            
+                    # chamar o método de output to keypoint e com o resultado fazer outro for, esse for irei chamar o dets_to_sort
+                    
+                    #dicionario auxiliar para keypoints
+                    dic = {}
+
+                    # Chama o output_to_keypoint (dentro do draw) para detectar os keypoints
+                    #vid_cap = cv2.cvtColor(vid_cap, cv2.COLOR_BGR2RGB)
+                    output, img = run_inference(img, model_kpts, device)
+                    output = non_max_suppression_kpt(output, 
+                                        0.25, # Confidence Threshold
+                                        0.65, # IoU Threshold
+                                        nc=model_kpts.yaml['nc'], # Number of Classes
+                                        nkpt=model_kpts.yaml['nkpt'], # Number of Keypoints
+                                        kpt_label=True)
+                    with torch.no_grad():
+                            output = output_to_keypoint(output)
+                            
+                    #pass an empty array to sort
+                    dets_to_sort = np.empty((0,7))
+
+                    print('output shade')
+                    print(output.shape[0])
+
+                    #batch_id, class_id, x, y, w, h, conf, *kpts
+                    for idx in range(output.shape[0]):
+                        batch_id = output[idx, 0]
+                        class_id = output[idx, 1]
+                        x = output[idx, 2]
+                        y = output[idx, 3]
+                        w = output[idx, 4]
+                        h = output[idx, 5]
+                        conf = output[idx, 6]
+                        keypoints = output[idx, 7:].T
+
+                    if(class_id == 0): #chama o tracking para pessoas
+                        x1,y1,x2,y2 = xywh2xyxy_personalizado([x, y, w, h])
+                        dic[idx] = keypoints
+                        print('vetor sendo salvo no tracker')
+                        print(x1, y1, x2, y2, conf, class_id, idx)
+                        #w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        #h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        dets_to_sort = np.vstack((dets_to_sort, 
+                                np.array([x1, y1, x2, y2, conf, class_id, idx])))
+
+                    print('dets to sort')
+                    print(dets_to_sort)
+                            
+                    # Run SORT
+                    tracked_dets = sort_tracker.update_kpts(dets_to_sort)
+                    tracks = sort_tracker.getTrackers()
+
+                    txt_str = ""
+                    
+                    #loop over tracks
+                    for track in tracks:
+                        # color = compute_color_for_labels(id)
+                        '''
+                        #draw colored tracks
+                        if colored_trk:
+                            [cv2.line(im0, (int(track.centroidarr[i][0]),
+                                        int(track.centroidarr[i][1])), 
+                                        (int(track.centroidarr[i+1][0]),
+                                        int(track.centroidarr[i+1][1])),
+                                        rand_color_list[track.id], thickness=2) 
+                                        for i,_ in  enumerate(track.centroidarr) 
+                                        if i < len(track.centroidarr)-1 ] 
+                        #draw same color tracks
+                        else:
+                            [cv2.line(im0, (int(track.centroidarr[i][0]),
+                                        int(track.centroidarr[i][1])), 
+                                        (int(track.centroidarr[i+1][0]),
+                                        int(track.centroidarr[i+1][1])),
+                                        (255,0,0), thickness=2) 
+                                        for i,_ in  enumerate(track.centroidarr) 
+                                        if i < len(track.centroidarr)-1 ] 
+                        '''
+                                    
+                    #só vai ter pessoas, então posso fazer a chamada passando como um array, a lista de kpts que nem categories (da para pegar no for do output_to_keypoints)
+                    #dentro do método de draw_boxes chamar o plot skeleton
+                    # draw boxes for visualization 
+                    
+                    print('tracked dets')
+                    print(tracked_dets)
+
+                    if len(tracked_dets)>0:
+                        bbox_xyxy = tracked_dets[:,:4]
+                        identities = tracked_dets[:, 8]
+                        categories = tracked_dets[:, 4]
+                        indices_kpts = tracked_dets[:, 8]
+                        #dentro do draw_boxes, testar se intercepta (passando a lista de veiculos)
+                        draw_boxes_kpts(im0, bbox_xyxy, vehicles_objs, identities, categories, dic, indices_kpts, names, save_with_object_id)
+
+                    draw_boxes_vehicles(im0, dets_vehicles, save_with_object_id)  
+                    #........................................................
+                    
+                    #fazer um for que passe pela lista de veiculos que criei e chama o plot_box ou draw_box mostrando vehicle
+                    
+                # Print time (inference + NMS)
+                print(f'{s}Done. NMS')
+            
+            frame = cv2.resize(frame, (int(cap.get(3)), int(cap.get(4))))
+            out.write(frame)
+            #cv2.imshow('Pose estimation', frame)
+        else:
+            break
+
+        if cv2.waitKey(10) & 0xFF == ord('q'):
+            break
 
 
 if __name__ == '__main__':
@@ -474,7 +669,7 @@ if __name__ == '__main__':
     with torch.no_grad():
         if opt.update:  # update all models (to fix SourceChangeWarning)
             for opt.weights in ['yolov7.pt']:
-                detect()
+                detect_kpts()
                 strip_optimizer(opt.weights)
         else:
             detect()
