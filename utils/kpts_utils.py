@@ -247,7 +247,7 @@ def scale_keypoints_kpts(img1_shape, keypoints, img0_shape, ratio_pad=None):
       keypoints[(3*i)] -= pad[0]  # x padding
       keypoints[(3*i)+1] -= pad[1]  # y padding
     
-    for i in range(len(keypoints)):
+    for i in range(17):
       keypoints[(3*i)] /= gain  # x padding
       keypoints[(3*i)+1] /= gain  # y padding
 
