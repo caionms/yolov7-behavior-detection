@@ -87,11 +87,14 @@ def plot_skeleton_kpts_v2(im, kpts, steps, box, vehicles_boxes, orig_shape=None)
     #Condição para saber se está próximo de veículo
     for v_box in vehicles_boxes: 
       print(bbox_iou(b, v_box))
+      if bbox_iou(b, v_box) > 0:
+        is_suspect = True
 
     #Calculate if squat
     #if(is_squat_v4(kpts, steps)):
     #  is_suspect = True
     #  plot_text_box(im, int(80), int(80), "Agachado")
+    
     #Plot keypoints
     for kid in range(num_kpts):
         if(not is_suspect):
@@ -103,7 +106,7 @@ def plot_skeleton_kpts_v2(im, kpts, steps, box, vehicles_boxes, orig_shape=None)
                 conf = kpts[steps * kid + 2] # acima de 0.5 para considerar o ponto correto
                 if conf < 0.5:
                     continue
-            if(kid == 61 or kid == 122 or kid == 113): # condição para definir quais pontos vão ser desenhados
+            if(kid == 61 or kid == 122 or kid == 113): # pinta de vermelho se é suspeito
               r = g = b = 255
             cv2.circle(im, (int(x_coord), int(y_coord)), radius, (int(r), int(g), int(b)), -1)
             #plot_number(im, int(x_coord), int(y_coord), (int(r), int(g), int(b)), str(kid))
