@@ -86,8 +86,8 @@ def plot_skeleton_kpts_v2(im, kpts, steps, box, vehicles_boxes, orig_shape=None)
 
     #Condição para saber se está próximo de veículo
     for v_box in vehicles_boxes: 
-      print(bbox_iou_vehicle(b, v_box))
-      if bbox_iou_vehicle(b, v_box) > 0:
+      print(bbox_iou_vehicle(box, v_box))
+      if bbox_iou_vehicle(box, v_box) > 0:
         is_suspect = True
 
     #Calculate if squat
