@@ -203,3 +203,33 @@ def bbox_iou_vehicle(box1, box2):
     iou = intersection_area / union_area
 
     return iou
+  
+def scale_coords_kpts(img1_shape, coords, img0_shape, ratio_pad=None):
+    # Rescale coords (xyxy) from img1_shape to img0_shape
+    if ratio_pad is None:  # calculate from img0_shape
+        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])  # gain  = old / new
+        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2  # wh padding
+    else:
+        gain = ratio_pad[0][0]
+        pad = ratio_pad[1]
+    print(coords)
+    coords[0] -= pad[0]  # x padding
+    coords[2] -= pad[0]  # x padding
+    coords[1] -= pad[1]  # y padding
+    coords[3] -= pad[1]  # y padding
+    
+    for i in range(len(coords)):
+        coords[i] /= gain
+    tensor = clip_coords_kpts(coords, img0_shape)
+    return tensor.detach().numpy()
+
+
+def clip_coords_kpts(boxes, img_shape):
+    # Clip bounding xyxy bounding boxes to image shape (height, width)
+    np_array = np.array(boxes)
+    tensor = torch.from_numpy(np_array)
+    tensor[0].clamp_(0, img_shape[1])  # x1
+    tensor[1].clamp_(0, img_shape[0])  # y1
+    tensor[2].clamp_(0, img_shape[1])  # x2
+    tensor[3].clamp_(0, img_shape[0])  # y2
+    return tensor

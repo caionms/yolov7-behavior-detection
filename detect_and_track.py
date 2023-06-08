@@ -25,7 +25,7 @@ from torchvision import transforms
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt, bbox_iou
 from utils.plots import output_to_keypoint, plot_skeleton_kpts,colors,plot_one_box_kpt
-from utils.kpts_utils import run_inference, draw_keypoints, plot_skeleton_kpts_v2, xywh2xyxy_personalizado, xywh2xyxy_personalizado_2
+from utils.kpts_utils import run_inference, draw_keypoints, plot_skeleton_kpts_v2, xywh2xyxy_personalizado, xywh2xyxy_personalizado_2, scale_coords_kpts
 
 #For SORT tracking
 import skimage
@@ -290,6 +290,7 @@ def detect(save_img=False):
                   if(class_id == 0): #chama o tracking para pessoas
                     x1,y1,x2,y2 = xywh2xyxy_personalizado([x, y, w, h])
                     dic[idx] = keypoints
+                    [x1,y1,x2,y2] = scale_coords_kpts(img.shape[2:], [x1,y1,x2,y2], im0.shape).round()
                     print('vetor sendo salvo no tracker')
                     print(x1, y1, x2, y2, conf, class_id, idx)
                     #w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
