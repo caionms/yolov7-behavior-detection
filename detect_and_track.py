@@ -25,7 +25,7 @@ from torchvision import transforms
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt, bbox_iou
 from utils.plots import output_to_keypoint, plot_skeleton_kpts,colors,plot_one_box_kpt
-from utils.kpts_utils import run_inference, draw_keypoints, plot_skeleton_kpts_v2, xywh2xyxy_personalizado, xywh2xyxy_personalizado_2, scale_coords_kpts
+from utils.kpts_utils import run_inference, draw_keypoints, plot_skeleton_kpts_v2, xywh2xyxy_personalizado, xywh2xyxy_personalizado_2, scale_coords_kpts, scale_keypoints_kpts
 
 #For SORT tracking
 import skimage
@@ -283,6 +283,7 @@ def detect(save_img=False):
                   print(x, y, w, h)
                   conf = output[idx, 6]
                   keypoints = output[idx, 7:].T
+                  keypoints = scale_keypoints_kpts(img.shape[2:], keypoints, im0.shape).round()
 
                   print('class id')
                   print(class_id)

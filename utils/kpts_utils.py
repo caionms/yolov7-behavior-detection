@@ -212,7 +212,7 @@ def scale_coords_kpts(img1_shape, coords, img0_shape, ratio_pad=None):
     else:
         gain = ratio_pad[0][0]
         pad = ratio_pad[1]
-    print(coords)
+    
     coords[0] -= pad[0]  # x padding
     coords[2] -= pad[0]  # x padding
     coords[1] -= pad[1]  # y padding
@@ -232,4 +232,33 @@ def clip_coords_kpts(boxes, img_shape):
     tensor[1].clamp_(0, img_shape[0])  # y1
     tensor[2].clamp_(0, img_shape[1])  # x2
     tensor[3].clamp_(0, img_shape[0])  # y2
+    return tensor
+  
+def scale_keypoints_kpts(img1_shape, keypoints, img0_shape, ratio_pad=None):
+    # Rescale coords of keypoints (xy) from img1_shape to img0_shape
+    if ratio_pad is None:  # calculate from img0_shape
+        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])  # gain  = old / new
+        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2  # wh padding
+    else:
+        gain = ratio_pad[0][0]
+        pad = ratio_pad[1]
+    
+    for i in range(17):
+      keypoints[(3*i)] -= pad[0]  # x padding
+      keypoints[(3*i)+1] -= pad[1]  # y padding
+    
+    for i in range(len(keypoints)):
+      keypoints[(3*i)] /= gain  # x padding
+      keypoints[(3*i)+1] /= gain  # y padding
+
+    tensor = clip_keypoints_kpts(keypoints, img0_shape)
+    return tensor.detach().numpy()
+  
+def clip_keypoints_kpts(keypoints, img_shape):
+    # Clip bounding xy keypoints to image shape (height, width)
+    np_array = np.array(keypoints)
+    tensor = torch.from_numpy(np_array)
+    for i in range(17):
+      tensor[(3*i)].clamp_(0, img_shape[1])  # x
+      tensor[(3*i)+1].clamp_(0, img_shape[0])  # y padding
     return tensor
