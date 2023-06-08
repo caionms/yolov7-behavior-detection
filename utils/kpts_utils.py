@@ -18,13 +18,13 @@ import time
 
 def run_inference(image, model, device):
     # Resize and pad image
-    image = letterbox(image, 960, stride=64, auto=True)[0] # shape: (567, 960, 3)
+    #image = letterbox(image, 960, stride=64, auto=True)[0] # shape: (567, 960, 3)
     # Apply transforms
-    image = transforms.ToTensor()(image) # torch.Size([3, 567, 960])
-    if torch.cuda.is_available():
-      image = image.half().to(device)
+    #image = transforms.ToTensor()(image) # torch.Size([3, 567, 960])
+    #if torch.cuda.is_available():
+    #  image = image.half().to(device)
     # Turn image into batch
-    image = image.unsqueeze(0) # torch.Size([1, 3, 567, 960])
+    #image = image.unsqueeze(0) # torch.Size([1, 3, 567, 960])
     with torch.no_grad():
       output, _ = model(image)
     return output, image
@@ -78,7 +78,10 @@ def plot_skeleton_kpts_v2(im, kpts, steps, orig_shape=None):
     #Cores para keypoints (seguindo a ordem definida)
     pose_kpt_color = palette[[16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 9, 9, 9, 9, 9, 9]]
     radius = 5
+    if isinstance(kpts, np.float64):
+      kpts = kpts.tolist()
     num_kpts = len(kpts) // steps
+    print('Nm de kpts = ' + str(num_kpts))
     is_suspect = False #Condição para pintar de suspeito
     r, g, b = 0, 0, 255 #RED - Ordem inversa
 
@@ -125,3 +128,20 @@ def plot_skeleton_kpts_v2(im, kpts, steps, orig_shape=None):
         if pos2[0] % 640 == 0 or pos2[1] % 640 == 0 or pos2[0]<0 or pos2[1]<0:
             continue
         cv2.line(im, pos1, pos2, (int(r), int(g), int(b)), thickness=2)
+
+def xywh2xyxy_personalizado(boxes):
+    """
+    Converte caixas delimitadoras no formato [x, y, w, h] para [x1, y1, x2, y2].
+    
+    Args:
+        boxes: Lista de caixas delimitadoras no formato [x, y, w, h].
+        
+    Returns:
+        Lista de caixas delimitadoras no formato [x1, y1, x2, y2].
+    """
+    x, y, w, h = boxes[0], boxes[1], boxes[2], boxes[3]
+    x1 = x
+    y1 = y
+    x2 = x + w
+    y2 = y + h
+    return [x1, y1, x2, y2]

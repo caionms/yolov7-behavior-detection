@@ -25,7 +25,7 @@ from torchvision import transforms
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt
 from utils.plots import output_to_keypoint, plot_skeleton_kpts,colors,plot_one_box_kpt
-from utils.kpts_utils import run_inference, draw_keypoints, plot_skeleton_kpts_v2
+from utils.kpts_utils import run_inference, draw_keypoints, plot_skeleton_kpts_v2, xywh2xyxy_personalizado
 
 #For SORT tracking
 import skimage
@@ -33,7 +33,7 @@ from sort import *
 
 #............................... Bounding Boxes Drawing ............................
 """Function to Draw Bounding boxes"""
-def draw_boxes(img, bbox, identities=None, categories=None, names=None, save_with_object_id=False, path=None,offset=(0, 0)):
+def draw_boxes(img, bbox, identities=None, categories=None, dic=None, indices_kpts=None, names=None, save_with_object_id=False, path=None,offset=(0, 0)):
     for i, box in enumerate(bbox):
         x1, y1, x2, y2 = [int(i) for i in box]
         x1 += offset[0]
@@ -42,6 +42,9 @@ def draw_boxes(img, bbox, identities=None, categories=None, names=None, save_wit
         y2 += offset[1]
         cat = int(categories[i]) if categories is not None else 0
         id = int(identities[i]) if identities is not None else 0
+        kpts = indices_kpts[i]
+        plot_skeleton_kpts_v2(img, kpts, 3)
+
         data = (int((box[0]+box[2])/2),(int((box[1]+box[3])/2)))
         label = str(id) + ":"+ names[cat]
         (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
@@ -176,7 +179,7 @@ def detect(save_img=False):
         t3 = time_synchronized()
 
         # Apply Classifier
-        if classify:
+        if classify: #pred = output
             pred = apply_classifier(pred, modelc, img, im0s)
 
         # Saves the boxes of vehicles
@@ -206,9 +209,6 @@ def detect(save_img=False):
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 #..................USE TRACK FUNCTION....................
-                #pass an empty array to sort
-                dets_to_sort = np.empty((0,6))
-                
                 # NOTE: We send in detected object class too
                 for x1,y1,x2,y2,conf,detclass in det.cpu().detach().numpy():
                     if(detclass == 2 or detclass == 3): #adiciona os veiculos na lista
@@ -220,23 +220,41 @@ def detect(save_img=False):
                         
                 # chamar o método de output to keypoint e com o resultado fazer outro for, esse for irei chamar o dets_to_sort
                 
+                #dicionario auxiliar para keypoints
+                dic = {}
+
                 # Chama o output_to_keypoint (dentro do draw) para detectar os keypoints
-                vid_cap = cv2.cvtColor(vid_cap, cv2.COLOR_BGR2RGB)
-                output, vid_cap = run_inference(imgsz, model_kpts, device)
+                #vid_cap = cv2.cvtColor(vid_cap, cv2.COLOR_BGR2RGB)
+                output, img = run_inference(img, model_kpts, device)
                 output = non_max_suppression_kpt(output, 
                                      0.25, # Confidence Threshold
                                      0.65, # IoU Threshold
-                                     nc=model.yaml['nc'], # Number of Classes
-                                     nkpt=model.yaml['nkpt'], # Number of Keypoints
+                                     nc=model_kpts.yaml['nc'], # Number of Classes
+                                     nkpt=model_kpts.yaml['nkpt'], # Number of Keypoints
                                      kpt_label=True)
                 with torch.no_grad():
                         output = output_to_keypoint(output)
                         
-                for batch_id, class_id, x, y, w, h, conf, *kpts in output.cpu().detach().numpy():
-                    if(detclass == 0): #chama o tracking para pessoas
-                        x1,y1,x2,y2 = xywh2xyxy([x, y, w, h])
-                        dets_to_sort = np.vstack((dets_to_sort, 
-                                np.array([x1, y1, x2, y2, conf, 0, *kpts])))
+                #pass an empty array to sort
+                dets_to_sort = np.empty((0,7))
+
+                #batch_id, class_id, x, y, w, h, conf, *kpts
+                for idx in range(output.shape[0]):
+                  batch_id = output[idx, 0]
+                  class_id = output[idx, 1]
+                  x = output[idx, 2]
+                  y = output[idx, 3]
+                  w = output[idx, 4]
+                  h = output[idx, 5]
+                  conf = output[idx, 6]
+                  keypoints = output[idx, 7:].T
+
+                  if(class_id == 0): #chama o tracking para pessoas
+                    #x1,y1,x2,y2 = xywh2xyxy_personalizado([x, y, w, h])
+                    dic[i] = keypoints;
+                    print(x1, y1, x2, y2, conf, class_id, i)
+                    dets_to_sort = np.vstack((dets_to_sort, 
+                            np.array([x1, y1, x2, y2, conf, class_id, i])))
                                     
                 # Run SORT
                 tracked_dets = sort_tracker.update_kpts(dets_to_sort)
@@ -287,12 +305,13 @@ def detect(save_img=False):
                     bbox_xyxy = tracked_dets[:,:4]
                     identities = tracked_dets[:, 8]
                     categories = tracked_dets[:, 4]
-                    kpts = tracked_dets[:, 6] # Pegar os keypoints de cada elemento
+                    indices_kpts = tracked_dets[:, 4]
+                    print('teste')
+                    print(tracked_dets)
                     
-                    plot_skeleton_kpts_v2(imgsz, *kpts, 3)
-                    
+
                     #dentro do draw_boxes, testar se intercepta (passando a lista de veiculos)
-                    draw_boxes(im0, bbox_xyxy, identities, categories, kpts, names, save_with_object_id, txt_path)
+                    draw_boxes(im0, bbox_xyxy, identities, categories, dic, indices_kpts, names, save_with_object_id, txt_path)
                 #........................................................
                 
                 #fazer um for que passe pela lista de veiculos que criei e chama o plot_box ou draw_box mostrando vehicle
