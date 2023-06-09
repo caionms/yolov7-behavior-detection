@@ -18,13 +18,13 @@ import time
 
 def run_inference(image, model, device):
     # Resize and pad image
-    image = letterbox(image, 960, stride=64, auto=True)[0] # shape: (567, 960, 3)
+    #image = letterbox(image, 960, stride=64, auto=True)[0] # shape: (567, 960, 3)
     # Apply transforms
-    image = transforms.ToTensor()(image) # torch.Size([3, 567, 960])
-    if torch.cuda.is_available():
-      image = image.half().to(device)
+    #image = transforms.ToTensor()(image) # torch.Size([3, 567, 960])
+    #if torch.cuda.is_available():
+    #  image = image.half().to(device)
     # Turn image into batch
-    image = image.unsqueeze(0) # torch.Size([1, 3, 567, 960])
+    #image = image.unsqueeze(0) # torch.Size([1, 3, 567, 960])
     with torch.no_grad():
       output, _ = model(image)
     return output, image
@@ -115,12 +115,6 @@ def plot_skeleton_kpts_v2(im, kpts, steps, box, vehicles_boxes, orig_shape=None)
             cv2.circle(im, (int(x_coord), int(y_coord)), radius, (int(r), int(g), int(b)), -1)
             #plot_number(im, int(x_coord), int(y_coord), (int(r), int(g), int(b)), str(kid))
 
-        
-    #cv2.circle(im, (int(421.00), int(491.50)), 5, (0, 0, 255), -1)
-    #cv2.circle(im, (int(373.50), int(451.00)), 5, (0, 0, 255), -1)
-    #cv2.line(im, (int(kpts[(14)*steps]), int(kpts[(14)*steps+1])), (int(373.50), int(451.00)), (0, 0, 255), thickness=2)
-    #cv2.line(im, (int(kpts[(13)*steps]), int(kpts[(13)*steps+1])), (int(421.00), int(491.50)), (0, 0, 255), thickness=2)
-
 
     #Plot lines
     for sk_id, sk in enumerate(skeleton):
@@ -138,6 +132,7 @@ def plot_skeleton_kpts_v2(im, kpts, steps, box, vehicles_boxes, orig_shape=None)
         if pos2[0] % 640 == 0 or pos2[1] % 640 == 0 or pos2[0]<0 or pos2[1]<0:
             continue
         cv2.line(im, pos1, pos2, (int(r), int(g), int(b)), thickness=2)
+    return is_suspect
 
 def xywh2xyxy_personalizado(boxes):
     """

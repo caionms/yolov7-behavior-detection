@@ -43,16 +43,25 @@ def draw_boxes_kpts(img, bbox, vehicles_objs, identities=None, categories=None, 
 
         cat = int(categories[i]) if categories is not None else 0
         id = int(identities[i]) if identities is not None else 0
+
+        is_suspect = False
         
         #chama o método de desenhar keypoints
         if indices_kpts[i]-1 in dic:
-            plot_skeleton_kpts_v2(img, dic[indices_kpts[i]-1], 3, [x1,y1,x2,y2], vehicles_objs)
+            is_suspect = plot_skeleton_kpts_v2(img, dic[indices_kpts[i]-1], 3, [x1,y1,x2,y2], vehicles_objs)
 
         data = (int((box[0]+box[2])/2),(int((box[1]+box[3])/2)))
-        label = str(id) + ":"+ names[cat]
+        
+        class_name = names[cat]
+        r, g, b = 255,144,30
+        if is_suspect:
+          class_name = 'suspect'
+          r, g, b = 0, 0, 255 #RED - Ordem inversa
+        label = str(id) + ":"+ class_name
+
         (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
         cv2.rectangle(img, (x1, y1), (x2, y2), (255,0,20), 2)
-        cv2.rectangle(img, (x1, y1 - 20), (x1 + w, y1), (255,144,30), -1)
+        cv2.rectangle(img, (x1, y1 - 20), (x1 + w, y1), (r, g, b), -1)
         cv2.putText(img, label, (x1, y1 - 5),cv2.FONT_HERSHEY_SIMPLEX, 
                     0.6, [255, 255, 255], 1)
         # cv2.circle(img, data, 6, color,-1)   #centroid of box
