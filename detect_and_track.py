@@ -268,7 +268,7 @@ def detect(save_img=False):
 
                 #Detecta os keypoints
                 #vid_cap = cv2.cvtColor(vid_cap, cv2.COLOR_BGR2RGB)
-                output, img = run_inference(img, model_kpts, device)
+                output, img = run_inference(im0s, model_kpts, device)
                 output = non_max_suppression_kpt(output, 
                                      0.25, # Confidence Threshold
                                      0.65, # IoU Threshold
