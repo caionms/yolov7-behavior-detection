@@ -43,7 +43,10 @@ def draw_boxes_kpts(img, bbox, vehicles_objs, identities=None, categories=None, 
 
         cat = int(categories[i]) if categories is not None else 0
         id = int(identities[i]) if identities is not None else 0
-        plot_skeleton_kpts_v2(img, dic[indices_kpts[i]-1], 3, [x1,y1,x2,y2], vehicles_objs)
+        
+        #chama o método de desenhar keypoints
+        if indices_kpts[i]-1 in dic:
+            plot_skeleton_kpts_v2(img, dic[indices_kpts[i]-1], 3, [x1,y1,x2,y2], vehicles_objs)
 
         data = (int((box[0]+box[2])/2),(int((box[1]+box[3])/2)))
         label = str(id) + ":"+ names[cat]
@@ -209,6 +212,7 @@ def detect(save_img=False):
             pred = apply_classifier(pred, modelc, img, im0s)
 
         # Saves the boxes of vehicles
+        # Usado para calcular IoU
         vehicles_objs = []
 
         # Saves the boxes of people
@@ -250,10 +254,10 @@ def detect(save_img=False):
                         
                 # chamar o método de output to keypoint e com o resultado fazer outro for, esse for irei chamar o dets_to_sort
                 
-                #dicionario auxiliar para keypoints
+                #dicionario auxiliar para acesso de keypoints
                 dic = {}
 
-                # Chama o output_to_keypoint (dentro do draw) para detectar os keypoints
+                #Detecta os keypoints
                 #vid_cap = cv2.cvtColor(vid_cap, cv2.COLOR_BGR2RGB)
                 output, img = run_inference(img, model_kpts, device)
                 output = non_max_suppression_kpt(output, 
@@ -265,12 +269,10 @@ def detect(save_img=False):
                 with torch.no_grad():
                         output = output_to_keypoint(output)
                         
-                #pass an empty array to sort
+                #pass an empty array to sort of person
                 dets_to_sort = np.empty((0,7))
 
-                print('output shade')
-                print(output.shape[0])
-
+                #extrai as informações da detecção de keypoints
                 #batch_id, class_id, x, y, w, h, conf, *kpts
                 for idx in range(output.shape[0]):
                   batch_id = output[idx, 0]
@@ -279,28 +281,19 @@ def detect(save_img=False):
                   y = output[idx, 3]
                   w = output[idx, 4]
                   h = output[idx, 5]
-                  print('x y w h')
-                  print(x, y, w, h)
                   conf = output[idx, 6]
                   keypoints = output[idx, 7:].T
+                  #ajusta a escala dos keypoints
                   keypoints = scale_keypoints_kpts(img.shape[2:], keypoints, im0.shape).round()
-
-                  print('class id')
-                  print(class_id)
 
                   if(class_id == 0): #chama o tracking para pessoas
                     x1,y1,x2,y2 = xywh2xyxy_personalizado([x, y, w, h])
                     dic[idx] = keypoints
+                    #ajusta a escala da bbox
                     [x1,y1,x2,y2] = scale_coords_kpts(img.shape[2:], [x1,y1,x2,y2], im0.shape).round()
-                    print('vetor sendo salvo no tracker')
-                    print(x1, y1, x2, y2, conf, class_id, idx)
-                    #w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    #h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    #guarda as detecções de pessoas para o tracker
                     dets_to_sort = np.vstack((dets_to_sort, 
                             np.array([x1, y1, x2, y2, conf, class_id, idx])))
-
-                print('dets to sort')
-                print(dets_to_sort)
                         
                 # Run SORT
                 tracked_dets = sort_tracker.update_kpts(dets_to_sort)
@@ -343,19 +336,12 @@ def detect(save_img=False):
                     with open(txt_path + '.txt', 'a') as f:
                         f.write(txt_str)
                                 
-                #só vai ter pessoas, então posso fazer a chamada passando como um array, a lista de kpts que nem categories (da para pegar no for do output_to_keypoints)
-                #dentro do método de draw_boxes chamar o plot skeleton
-                # draw boxes for visualization 
-                
-                print('tracked dets')
-                print(tracked_dets)
-
+                #se pessoas foram detectadas, guarda os valores em listas, para desenhar as bboxes e os keypoints
                 if len(tracked_dets)>0:
                     bbox_xyxy = tracked_dets[:,:4]
                     identities = tracked_dets[:, 8]
                     categories = tracked_dets[:, 4]
                     indices_kpts = tracked_dets[:, 8]
-                    #dentro do draw_boxes, testar se intercepta (passando a lista de veiculos)
                     draw_boxes_kpts(im0, bbox_xyxy, vehicles_objs, identities, categories, dic, indices_kpts, names, save_with_object_id, txt_path)
 
                 draw_boxes_vehicles(im0, dets_vehicles, save_with_object_id, txt_path)  
