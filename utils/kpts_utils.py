@@ -361,3 +361,16 @@ def three_points_angle(kpts, kpts_ind, steps):
   #    angle_degrees = 180 - angle_degrees
 
   return angle_degrees 
+
+def plot_text_box(img, x, y, text):
+  font = cv2.FONT_HERSHEY_SIMPLEX
+  org = (x, y)
+  fontScale = 1
+  thickness = 2
+  text_size, _ = cv2.getTextSize(text, font, fontScale, thickness)
+  text_w, text_h = text_size
+  rect_w, rect_h = text_w + 10, text_h + 12
+  cv2.rectangle(img, (x, y), (x + rect_w, y + rect_h), (0, 0, 255), -1)
+  #cv2.putText(img, text, (x, y), font, fontScale, (255, 255, 255), thickness, cv2.LINE_AA)
+  cv2.putText(img, text, (x + 5, y + text_h + 5), font,
+              fontScale, (255, 255, 255), thickness, cv2.LINE_AA)
