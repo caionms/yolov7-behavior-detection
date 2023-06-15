@@ -30,7 +30,7 @@ from sort import *
 
 #............................... Bounding Boxes Drawing ............................
 """Function to Draw Bounding boxes"""
-def draw_boxes_kpts(img, bbox, vehicles_objs, identities=None, categories=None, dic=None, indices_kpts=None, names=None, save_with_object_id=False, path=None,offset=(0, 0)):  
+def draw_boxes_kpts(img, bbox, vehicles_objs, matriz_frames, identities=None, categories=None, dic=None, indices_kpts=None, names=None, save_with_object_id=False, path=None,offset=(0, 0)):  
     for i, box in enumerate(bbox):
         x1, y1, x2, y2 = [int(i) for i in box]
         x1 += offset[0]
@@ -40,6 +40,13 @@ def draw_boxes_kpts(img, bbox, vehicles_objs, identities=None, categories=None, 
 
         cat = int(categories[i]) if categories is not None else 0
         id = int(identities[i]) if identities is not None else 0
+        
+        for frames in matriz_frames:
+        
+        if id in matriz_frames:
+            matriz_frames[id] = matriz_frames[id] + 1
+        else: 
+            matriz_frames[id] = 0
 
         is_suspect = False
         
@@ -189,6 +196,8 @@ def detect(save_img=False):
     #img0 é do cv2.imread
     #
     for path, img, im0s, vid_cap in dataset:
+        
+        matriz_frames = {}
 
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -244,14 +253,13 @@ def detect(save_img=False):
                 #..................USE TRACK FUNCTION....................
                 #pass an empty array to sort
                 dets_vehicles = np.empty((0,6))
-                dets_persons = np.empty((0,7))
+                dets_persons = np.empty((0,6))
                 dets_to_sort = np.empty((0,7))
 
                 # NOTE: We send in detected object class too
-                for x1,y1,x2,y2,conf,detclass in det.cpu().detach().numpy():
+                for x1,y1,x2,y2,conf,detclass in reversed(det):
                     if(detclass == 2 or detclass == 3): #adiciona os veiculos na lista
-                        dets_vehicles = np.vstack((dets_vehicles, 
-                                np.array([x1, y1, x2, y2, conf, detclass])))
+                        plot_one_box([x1,y1,x2,y2], im0, label='vehicle', color=colors[int(detclass)], line_thickness=1)
                         vehicles_objs.append([x1,y1,x2,y2])
                     elif(detclass == 0): #adiciona pessoas na lista
                         dets_persons = np.vstack((dets_persons, 
@@ -262,7 +270,6 @@ def detect(save_img=False):
                 # chamada para calcular interseção
                 for person_box in dets_to_sort: 
                     for vehicle_box in vehicles_objs:
-                        print(bbox_iou_vehicle(person_box, person_box))
                         if bbox_iou_vehicle(vehicle_box, person_box) > 0.10:
                             run_keypoint_detection = True
                             dets_to_sort = np.vstack((dets_to_sort, 
@@ -358,8 +365,6 @@ def detect(save_img=False):
                         categories = tracked_dets[:, 4]
                         indices_kpts = tracked_dets[:, 8]
                         draw_boxes_kpts(im0, bbox_xyxy, identities, categories, dic, indices_kpts, names, save_with_object_id, txt_path)
-
-                draw_boxes_vehicles(im0, dets_vehicles, save_with_object_id, txt_path)  
                 #........................................................
                 
                 #fazer um for que passe pela lista de veiculos que criei e chama o plot_box ou draw_box mostrando vehicle
