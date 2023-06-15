@@ -156,8 +156,9 @@ def detect(opt):
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             if len(det):
                 # Rescale boxes from img_size to im0 size
-                scale_coords_tracking(img.shape[2:], det[:, :4], im0.shape, kpt_label=False)
-                scale_coords_tracking(img.shape[2:], det[:, 6:], im0.shape, kpt_label=kpt_label, step=3)
+                #scale_coords(img.shape[2:], det[:, :4], im0.shape, kpt_label=False)
+                #scale_coords(img.shape[2:], det[:, 6:], im0.shape, kpt_label=kpt_label, step=3)
+                scale_coords_tracking(img.shape[2:], det[:, :4], im0.shape)
 
                 # Print results
                 for c in det[:, 5].unique():
