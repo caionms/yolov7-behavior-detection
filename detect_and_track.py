@@ -41,12 +41,12 @@ def draw_boxes_kpts(img, bbox, vehicles_objs, matriz_frames, identities=None, ca
         cat = int(categories[i]) if categories is not None else 0
         id = int(identities[i]) if identities is not None else 0
         
-        for frames in matriz_frames:
+        #for frames in matriz_frames:
         
-        if id in matriz_frames:
-            matriz_frames[id] = matriz_frames[id] + 1
-        else: 
-            matriz_frames[id] = 0
+        #if id in matriz_frames:
+        #    matriz_frames[id] = matriz_frames[id] + 1
+        #else: 
+        #    matriz_frames[id] = 0
 
         is_suspect = False
         
@@ -364,7 +364,7 @@ def detect(save_img=False):
                         identities = tracked_dets[:, 8]
                         categories = tracked_dets[:, 4]
                         indices_kpts = tracked_dets[:, 8]
-                        draw_boxes_kpts(im0, bbox_xyxy, identities, categories, dic, indices_kpts, names, save_with_object_id, txt_path)
+                        draw_boxes_kpts(im0, bbox_xyxy, vehicles_objs, matriz_frames, identities, categories, dic, indices_kpts, names, save_with_object_id, txt_path)
                 #........................................................
                 
                 #fazer um for que passe pela lista de veiculos que criei e chama o plot_box ou draw_box mostrando vehicle
