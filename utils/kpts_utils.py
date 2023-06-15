@@ -87,10 +87,10 @@ def plot_skeleton_kpts_v2(im, kpts, steps, box, vehicles_boxes, orig_shape=None)
     r, g, b = 0, 0, 255 #RED - Ordem inversa
 
     #Condição para saber se está próximo de veículo
-    for v_box in vehicles_boxes: 
+    #for v_box in vehicles_boxes: 
       #print(bbox_iou_vehicle(box, v_box))
-      if bbox_iou_vehicle(box, v_box) > 0:
-        is_suspect = True
+    #  if bbox_iou_vehicle(box, v_box) > 0:
+    #    is_suspect = True
         #chama o is_squat
         #aqui vou acessar a matriz, se o id desse cara não estiver nela, adiciona e inicia o tempo e guarda a pose
         #caso esteja, calcula o tempo comparando com o atual, caso a pose seja False e a atual True, atualiza

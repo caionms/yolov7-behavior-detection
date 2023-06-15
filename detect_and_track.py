@@ -12,20 +12,17 @@ from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
 from utils.general import check_img_size, check_requirements, \
                 check_imshow, non_max_suppression, apply_classifier, \
-                scale_coords, xyxy2xywh, strip_optimizer, set_logging, \
-                increment_path, xywh2xyxy
+                scale_coords, strip_optimizer, set_logging, \
+                increment_path
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, \
                 time_synchronized, TracedModel
 from utils.download_weights import download
 
 #For keypoint detection
-import matplotlib.pyplot as plt
-from torchvision import transforms
-from utils.datasets import letterbox
-from utils.general import non_max_suppression_kpt, bbox_iou
-from utils.plots import output_to_keypoint, plot_skeleton_kpts,colors,plot_one_box_kpt
-from utils.kpts_utils import run_inference, draw_keypoints, plot_skeleton_kpts_v2, xywh2xyxy_personalizado, xywh2xyxy_personalizado_2, scale_coords_kpts, scale_keypoints_kpts
+from utils.general import non_max_suppression_kpt
+from utils.plots import output_to_keypoint,colors,plot_one_box_kpt
+from utils.kpts_utils import run_inference, plot_skeleton_kpts_v2, xywh2xyxy_personalizado, scale_coords_kpts, scale_keypoints_kpts, bbox_iou_vehicle
 
 #For SORT tracking
 import skimage
@@ -48,7 +45,7 @@ def draw_boxes_kpts(img, bbox, vehicles_objs, identities=None, categories=None, 
         
         #chama o método de desenhar keypoints
         if indices_kpts[i]-1 in dic:
-            is_suspect = plot_skeleton_kpts_v2(img, dic[indices_kpts[i]-1], 3, [x1,y1,x2,y2], vehicles_objs)
+            is_suspect,  = plot_skeleton_kpts_v2(img, dic[indices_kpts[i]-1], 3, [x1,y1,x2,y2], vehicles_objs)
 
         data = (int((box[0]+box[2])/2),(int((box[1]+box[3])/2)))
         
@@ -224,8 +221,6 @@ def detect(save_img=False):
         # Usado para calcular IoU
         vehicles_objs = []
 
-        # Saves the boxes of people
-        person_objs = []
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             if webcam:  # batch_size >= 1
@@ -249,6 +244,8 @@ def detect(save_img=False):
                 #..................USE TRACK FUNCTION....................
                 #pass an empty array to sort
                 dets_vehicles = np.empty((0,6))
+                dets_persons = np.empty((0,7))
+                dets_to_sort = np.empty((0,7))
 
                 # NOTE: We send in detected object class too
                 for x1,y1,x2,y2,conf,detclass in det.cpu().detach().numpy():
@@ -256,102 +253,111 @@ def detect(save_img=False):
                         dets_vehicles = np.vstack((dets_vehicles, 
                                 np.array([x1, y1, x2, y2, conf, detclass])))
                         vehicles_objs.append([x1,y1,x2,y2])
-                    #elif(detclass == 0): #adiciona pessoas na lista remover
-                    #    person_objs.append([x1,y1,x2,y2])
-                    #    dets_to_sort = np.vstack((dets_to_sort, 
-                    #            np.array([x1, y1, x2, y2, conf, detclass])))
-                        
-                # chamar o método de output to keypoint e com o resultado fazer outro for, esse for irei chamar o dets_to_sort
+                    elif(detclass == 0): #adiciona pessoas na lista
+                        dets_persons = np.vstack((dets_persons, 
+                                np.array([x1, y1, x2, y2, conf, detclass])))
                 
-                #dicionario auxiliar para acesso de keypoints
-                dic = {}
-
-                #Detecta os keypoints
-                #vid_cap = cv2.cvtColor(vid_cap, cv2.COLOR_BGR2RGB)
-                output, img = run_inference(im0s, model_kpts, device)
-                output = non_max_suppression_kpt(output, 
-                                     0.25, # Confidence Threshold
-                                     0.65, # IoU Threshold
-                                     nc=model_kpts.yaml['nc'], # Number of Classes
-                                     nkpt=model_kpts.yaml['nkpt'], # Number of Keypoints
-                                     kpt_label=True)
-                with torch.no_grad():
-                        output = output_to_keypoint(output)
-                        
-                #pass an empty array to sort of person
-                dets_to_sort = np.empty((0,7))
-
-                #extrai as informações da detecção de keypoints
-                #batch_id, class_id, x, y, w, h, conf, *kpts
-                for idx in range(output.shape[0]):
-                  batch_id = output[idx, 0]
-                  class_id = output[idx, 1]
-                  x = output[idx, 2]
-                  y = output[idx, 3]
-                  w = output[idx, 4]
-                  h = output[idx, 5]
-                  conf = output[idx, 6]
-                  keypoints = output[idx, 7:].T
-                  #ajusta a escala dos keypoints
-                  keypoints = scale_keypoints_kpts(img.shape[2:], keypoints, im0.shape).round()
-
-                  if(class_id == 0): #chama o tracking para pessoas
-                    x1,y1,x2,y2 = xywh2xyxy_personalizado([x, y, w, h])
-                    dic[idx] = keypoints
-                    #ajusta a escala da bbox
-                    [x1,y1,x2,y2] = scale_coords_kpts(img.shape[2:], [x1,y1,x2,y2], im0.shape).round()
-                    #guarda as detecções de pessoas para o tracker
-                    dets_to_sort = np.vstack((dets_to_sort, 
-                            np.array([x1, y1, x2, y2, conf, class_id, idx])))
-                        
-                # Run SORT
-                tracked_dets = sort_tracker.update_kpts(dets_to_sort)
-                tracks = sort_tracker.getTrackers()
-
-                txt_str = ""
+                run_keypoint_detection = False
                 
-                #loop over tracks
-                for track in tracks:
-                    # color = compute_color_for_labels(id)
-                    '''
-                    #draw colored tracks
-                    if colored_trk:
-                        [cv2.line(im0, (int(track.centroidarr[i][0]),
-                                    int(track.centroidarr[i][1])), 
-                                    (int(track.centroidarr[i+1][0]),
-                                    int(track.centroidarr[i+1][1])),
-                                    rand_color_list[track.id], thickness=2) 
-                                    for i,_ in  enumerate(track.centroidarr) 
-                                      if i < len(track.centroidarr)-1 ] 
-                    #draw same color tracks
-                    else:
-                        [cv2.line(im0, (int(track.centroidarr[i][0]),
-                                    int(track.centroidarr[i][1])), 
-                                    (int(track.centroidarr[i+1][0]),
-                                    int(track.centroidarr[i+1][1])),
-                                    (255,0,0), thickness=2) 
-                                    for i,_ in  enumerate(track.centroidarr) 
-                                      if i < len(track.centroidarr)-1 ] 
-                    '''
-                    if save_txt and not save_with_object_id:
-                        # Normalize coordinates
-                        txt_str += "%i %i %f %f" % (track.id, track.detclass, track.centroidarr[-1][0] / im0.shape[1], track.centroidarr[-1][1] / im0.shape[0])
-                        if save_bbox_dim:
-                            txt_str += " %f %f" % (np.abs(track.bbox_history[-1][0] - track.bbox_history[-1][2]) / im0.shape[0], np.abs(track.bbox_history[-1][1] - track.bbox_history[-1][3]) / im0.shape[1])
-                        txt_str += "\n"
+                # chamada para calcular interseção
+                for person_box in dets_to_sort: 
+                    for vehicle_box in vehicles_objs:
+                        print(bbox_iou_vehicle(person_box, person_box))
+                        if bbox_iou_vehicle(vehicle_box, person_box) > 0.10:
+                            run_keypoint_detection = True
+                            dets_to_sort = np.vstack((dets_to_sort, 
+                                person_box))
+                            
+                if(run_keypoint_detection):
+                    #Detecta os keypoints
+                    #vid_cap = cv2.cvtColor(vid_cap, cv2.COLOR_BGR2RGB)
+                    output, img = run_inference(im0s, model_kpts, device)
+                    output = non_max_suppression_kpt(output, 
+                                        0.25, # Confidence Threshold
+                                        0.65, # IoU Threshold
+                                        nc=model_kpts.yaml['nc'], # Number of Classes
+                                        nkpt=model_kpts.yaml['nkpt'], # Number of Keypoints
+                                        kpt_label=True)
+                    with torch.no_grad():
+                            output = output_to_keypoint(output)
+                            
+                    #dicionario auxiliar para acesso de keypoints
+                    dic = {}
+
+
+                    #extrai as informações da detecção de keypoints
+                    #batch_id, class_id, x, y, w, h, conf, *kpts
+                    for idx in range(output.shape[0]):
+                        batch_id = output[idx, 0]
+                        class_id = output[idx, 1]
+                        x = output[idx, 2]
+                        y = output[idx, 3]
+                        w = output[idx, 4]
+                        h = output[idx, 5]
+                        conf = output[idx, 6]
+                        keypoints = output[idx, 7:].T
+                        #ajusta a escala dos keypoints
+                        keypoints = scale_keypoints_kpts(img.shape[2:], keypoints, im0.shape).round()
+
+                        if(class_id == 0): #chama o tracking para pessoas
+                            x1,y1,x2,y2 = xywh2xyxy_personalizado([x, y, w, h])
+                            dic[idx] = keypoints
+                            #ajusta a escala da bbox
+                            [x1,y1,x2,y2] = scale_coords_kpts(img.shape[2:], [x1,y1,x2,y2], im0.shape).round()
+                            #guarda as detecções de pessoas para o tracker
+                            dets_to_sort = np.vstack((dets_to_sort, 
+                                    np.array([x1, y1, x2, y2, conf, class_id, idx])))
+                            
+                    # Run SORT
+                    tracked_dets = sort_tracker.update_kpts(dets_to_sort)
+                    tracks = sort_tracker.getTrackers()
+                
                
-                        
-                if save_txt and not save_with_object_id:
-                    with open(txt_path + '.txt', 'a') as f:
-                        f.write(txt_str)
-                                
-                #se pessoas foram detectadas, guarda os valores em listas, para desenhar as bboxes e os keypoints
-                if len(tracked_dets)>0:
-                    bbox_xyxy = tracked_dets[:,:4]
-                    identities = tracked_dets[:, 8]
-                    categories = tracked_dets[:, 4]
-                    indices_kpts = tracked_dets[:, 8]
-                    draw_boxes_kpts(im0, bbox_xyxy, vehicles_objs, identities, categories, dic, indices_kpts, names, save_with_object_id, txt_path)
+
+                    txt_str = ""
+                    
+                    #loop over tracks
+                    for track in tracks:
+                        # color = compute_color_for_labels(id)
+                        '''
+                        #draw colored tracks
+                        if colored_trk:
+                            [cv2.line(im0, (int(track.centroidarr[i][0]),
+                                        int(track.centroidarr[i][1])), 
+                                        (int(track.centroidarr[i+1][0]),
+                                        int(track.centroidarr[i+1][1])),
+                                        rand_color_list[track.id], thickness=2) 
+                                        for i,_ in  enumerate(track.centroidarr) 
+                                        if i < len(track.centroidarr)-1 ] 
+                        #draw same color tracks
+                        else:
+                            [cv2.line(im0, (int(track.centroidarr[i][0]),
+                                        int(track.centroidarr[i][1])), 
+                                        (int(track.centroidarr[i+1][0]),
+                                        int(track.centroidarr[i+1][1])),
+                                        (255,0,0), thickness=2) 
+                                        for i,_ in  enumerate(track.centroidarr) 
+                                        if i < len(track.centroidarr)-1 ] 
+                        '''
+                        if save_txt and not save_with_object_id:
+                            # Normalize coordinates
+                            txt_str += "%i %i %f %f" % (track.id, track.detclass, track.centroidarr[-1][0] / im0.shape[1], track.centroidarr[-1][1] / im0.shape[0])
+                            if save_bbox_dim:
+                                txt_str += " %f %f" % (np.abs(track.bbox_history[-1][0] - track.bbox_history[-1][2]) / im0.shape[0], np.abs(track.bbox_history[-1][1] - track.bbox_history[-1][3]) / im0.shape[1])
+                            txt_str += "\n"
+                
+                            
+                    if save_txt and not save_with_object_id:
+                        with open(txt_path + '.txt', 'a') as f:
+                            f.write(txt_str)
+                                    
+                    #se pessoas foram detectadas, guarda os valores em listas, para desenhar as bboxes e os keypoints
+                    if len(tracked_dets)>0:
+                        bbox_xyxy = tracked_dets[:,:4]
+                        identities = tracked_dets[:, 8]
+                        categories = tracked_dets[:, 4]
+                        indices_kpts = tracked_dets[:, 8]
+                        draw_boxes_kpts(im0, bbox_xyxy, identities, categories, dic, indices_kpts, names, save_with_object_id, txt_path)
 
                 draw_boxes_vehicles(im0, dets_vehicles, save_with_object_id, txt_path)  
                 #........................................................
